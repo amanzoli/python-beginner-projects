@@ -1,0 +1,84 @@
+name: XTESA Kiri Browser Vendor
+
+on:
+  push:
+    branches:
+      - feature/kiri-browser-build
+    paths:
+      - .github/workflows/xtesa-kiri-browser-vendor.yml
+
+permissions:
+  contents: read
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Kiri Moto 4.7.3
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: GridSpace/grid-apps
+          ref: 4.7.3
+          path: grid-apps
+
+      - name: Setup Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: grid-apps/package-lock.json
+
+      - name: Build official browser bundles
+        working-directory: grid-apps
+        shell: bash
+        run: |
+          set -euxo pipefail
+          npm ci
+          npm run webpack-ext
+          node bin/esbuild.config.mjs prod
+          test -s src/pack/kiri-eng.js
+          test -s src/pack/kiri-work.js
+          test -s src/pack/kiri-pool.js
+          node --check src/pack/kiri-eng.js
+          node --check src/pack/kiri-work.js
+          node --check src/pack/kiri-pool.js
+
+      - name: Assemble same-origin browser vendor
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p vendor/kiri vendor/wasm
+          cp grid-apps/src/pack/kiri-eng.js vendor/kiri/engine.js
+          cp grid-apps/src/pack/kiri-work.js vendor/kiri/worker.js
+          cp grid-apps/src/pack/kiri-pool.js vendor/kiri/pool.js
+          cp grid-apps/LICENSE vendor/LICENSE-KIRI-MOTO.txt
+
+          find grid-apps/src/wasm -maxdepth 1 -type f -name '*.wasm' -exec cp {} vendor/wasm/ \;
+
+          if [ ! -f vendor/wasm/manifold.wasm ]; then
+            mf="$(find grid-apps/node_modules -type f -name 'manifold*.wasm' | head -1 || true)"
+            if [ -n "$mf" ]; then cp "$mf" vendor/wasm/manifold.wasm; fi
+          fi
+
+          test -s vendor/kiri/engine.js
+          test -s vendor/kiri/worker.js
+          grep -q 'newEngine' vendor/kiri/engine.js
+
+          {
+            echo "Kiri:Moto 4.7.3"
+            echo "engine_bytes=$(wc -c < vendor/kiri/engine.js)"
+            echo "worker_bytes=$(wc -c < vendor/kiri/worker.js)"
+            echo "pool_bytes=$(wc -c < vendor/kiri/pool.js)"
+            find vendor/wasm -maxdepth 1 -type f -printf 'wasm=%f bytes=%s\n' | sort
+          } > vendor/BUILD_INFO.txt
+
+          sha256sum vendor/kiri/*.js vendor/wasm/*.wasm > vendor/SHA256SUMS
+
+      - name: Upload browser vendor
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: xtesa-kiri-browser-4.7.3
+          path: vendor
+          if-no-files-found: error
+          retention-days: 7
