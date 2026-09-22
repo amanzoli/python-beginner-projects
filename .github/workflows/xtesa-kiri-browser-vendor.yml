@@ -50,7 +50,7 @@ jobs:
           cp grid-apps/src/pack/kiri-eng.js vendor/kiri/engine.js
           cp grid-apps/src/pack/kiri-work.js vendor/kiri/worker.js
           cp grid-apps/src/pack/kiri-pool.js vendor/kiri/pool.js
-          cp grid-apps/LICENSE vendor/LICENSE-KIRI-MOTO.txt
+          cp grid-apps/license.md vendor/LICENSE-KIRI-MOTO.txt
 
           find grid-apps/src/wasm -maxdepth 1 -type f -name '*.wasm' -exec cp {} vendor/wasm/ \;
 
